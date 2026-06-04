@@ -1,0 +1,1159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <title>Two Hands 3D Globe Score Game</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      overflow: hidden;
+      font-family: Arial, sans-serif;
+      background: #020617;
+      color: white;
+    }
+
+    #cameraVideo {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      object-fit: cover;
+      transform: scaleX(-1);
+      z-index: 0;
+      opacity: 0.55;
+      filter: brightness(0.65) contrast(1.15);
+    }
+
+    #overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 1;
+      background:
+        radial-gradient(circle, rgba(14,165,233,0.10), rgba(2,6,23,0.86)),
+        linear-gradient(to bottom, rgba(0,0,0,0.2), rgba(0,0,0,0.75));
+      pointer-events: none;
+    }
+
+    #threeCanvas {
+      position: fixed;
+      inset: 0;
+      z-index: 2;
+    }
+
+    #startScreen,
+    #endScreen {
+      position: fixed;
+      inset: 0;
+      z-index: 30;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background:
+        radial-gradient(circle, rgba(56,189,248,0.18), rgba(2,6,23,0.96)),
+        linear-gradient(135deg, rgba(34,197,94,0.12), rgba(59,130,246,0.12));
+    }
+
+    .card {
+      width: min(580px, 92vw);
+      text-align: center;
+      background: rgba(15,23,42,0.84);
+      border: 1px solid rgba(255,255,255,0.24);
+      border-radius: 30px;
+      padding: 32px 28px;
+      backdrop-filter: blur(16px);
+      box-shadow: 0 24px 80px rgba(0,0,0,0.5);
+    }
+
+    .card h1 {
+      margin: 0 0 12px;
+      font-size: 34px;
+    }
+
+    .card p {
+      color: #dbeafe;
+      line-height: 1.6;
+      font-size: 15px;
+      margin: 8px 0;
+    }
+
+    #playerNameInput {
+      width: 100%;
+      margin-top: 18px;
+      padding: 15px 18px;
+      border-radius: 18px;
+      border: 2px solid rgba(255,255,255,0.24);
+      background: rgba(255,255,255,0.1);
+      color: white;
+      font-size: 18px;
+      text-align: center;
+      outline: none;
+    }
+
+    #playerNameInput::placeholder {
+      color: rgba(255,255,255,0.55);
+    }
+
+    #startGameBtn,
+    #playAgainBtn {
+      margin-top: 20px;
+      width: 100%;
+      padding: 15px 20px;
+      border: none;
+      border-radius: 999px;
+      color: white;
+      font-size: 19px;
+      font-weight: 900;
+      cursor: pointer;
+      background: linear-gradient(135deg, #38bdf8, #22c55e);
+      box-shadow: 0 12px 32px rgba(56,189,248,0.36);
+    }
+
+    #startGameBtn:hover,
+    #playAgainBtn:hover,
+    #languageBtn:hover {
+      transform: scale(1.03);
+    }
+
+    #languageBtn {
+      width: auto;
+      margin: 8px auto 12px;
+      padding: 8px 18px;
+      border: 1px solid rgba(255,255,255,0.28);
+      border-radius: 999px;
+      color: white;
+      font-size: 14px;
+      font-weight: 800;
+      cursor: pointer;
+      background: rgba(56,189,248,0.22);
+      box-shadow: 0 8px 24px rgba(56,189,248,0.18);
+    }
+
+    #gamePanel {
+      position: fixed;
+      right: 14px;
+      top: 14px;
+      z-index: 8;
+      width: 230px;
+      background: rgba(15,23,42,0.58);
+      border: 1px solid rgba(255,255,255,0.18);
+      border-radius: 18px;
+      padding: 12px 14px;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 12px 32px rgba(0,0,0,0.28);
+    }
+
+    #playerText {
+      font-size: 12px;
+      color: #e0f2fe;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    #timerText {
+      font-size: 22px;
+      font-weight: 900;
+      color: #fef3c7;
+      margin-top: 6px;
+    }
+
+    .missionText {
+      margin-top: 8px;
+      font-size: 12px;
+      color: #bfdbfe;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    #targetCountry {
+      color: #fde68a;
+      font-size: 18px;
+      font-weight: 900;
+      margin-top: 4px;
+      line-height: 1.2;
+    }
+
+    #scoreText {
+      font-size: 18px;
+      font-weight: 900;
+      color: #bbf7d0;
+      margin-top: 8px;
+    }
+
+    .hiddenInfo {
+      display: none;
+    }
+
+    .handCursor {
+      position: fixed;
+      width: 38px;
+      height: 38px;
+      border-radius: 999px;
+      border: 3px solid white;
+      background: rgba(56,189,248,0.75);
+      box-shadow: 0 0 30px rgba(56,189,248,1);
+      z-index: 10;
+      pointer-events: none;
+      transform: translate(-50%, -50%);
+      display: none;
+    }
+
+    #handCursor2 {
+      background: rgba(34,197,94,0.75);
+      box-shadow: 0 0 30px rgba(34,197,94,1);
+    }
+
+    #successFlash {
+      position: fixed;
+      inset: 0;
+      z-index: 15;
+      pointer-events: none;
+      display: grid;
+      place-items: center;
+      font-size: 56px;
+      font-weight: 900;
+      color: white;
+      text-shadow: 0 0 30px rgba(34,197,94,1);
+      opacity: 0;
+      transition: opacity 0.22s;
+      text-align: center;
+    }
+
+    .showFlash {
+      opacity: 1 !important;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    @media (max-width: 760px) {
+      #gamePanel {
+        top: 10px;
+        right: 10px;
+        bottom: auto;
+        width: 205px;
+        padding: 10px 12px;
+      }
+
+      #timerText {
+        font-size: 20px;
+      }
+
+      #targetCountry {
+        font-size: 16px;
+      }
+
+      #scoreText {
+        font-size: 16px;
+      }
+
+      .card h1 {
+        font-size: 26px;
+      }
+
+      .card p {
+        font-size: 13px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <video id="cameraVideo" autoplay playsinline muted></video>
+  <div id="overlay"></div>
+  <canvas id="threeCanvas"></canvas>
+
+  <div id="handCursor1" class="handCursor"></div>
+  <div id="handCursor2" class="handCursor"></div>
+
+  <div id="startScreen">
+    <div class="card">
+      <h1 id="startTitle">🌍 Two Hands 3D Globe Game</h1>
+      <button id="languageBtn">ภาษาไทย</button>
+
+      <p id="startDesc">Enter the player name and click Start Game.</p>
+      <p id="timeDesc">Total play time: <b>3 minutes</b></p>
+      <p id="pointDesc">Easy countries = <b>10 points</b><br>Difficult countries = <b>20 points</b></p>
+      <p id="moveDesc">🖐️ Move your hand left or right to rotate the globe.</p>
+      <p id="zoomInDesc">🤏 Pinch your thumb and index finger to zoom in quickly.</p>
+      <p id="zoomOutDesc">⬅️➡️ Use both index fingers and move them apart to zoom out.</p>
+      <p id="lockDesc">✊ Make a fist to lock the globe. 🖐️ Open your palm to unlock it.</p>
+
+      <input id="playerNameInput" type="text" placeholder="Enter player name" />
+      <button id="startGameBtn">START GAME</button>
+    </div>
+  </div>
+
+  <div id="endScreen" class="hidden">
+    <div class="card">
+      <h1 id="endTitle">⏰ Time’s Up!</h1>
+      <p id="finalPlayerName">Player: -</p>
+      <p id="finalScore">Final Score: 0</p>
+      <button id="playAgainBtn">PLAY AGAIN</button>
+    </div>
+  </div>
+
+  <div id="gamePanel">
+    <div id="playerText">Player: -</div>
+    <div id="timerText">03:00</div>
+    <div id="missionText" class="missionText">Find</div>
+    <div id="targetCountry">-</div>
+    <div id="scoreText">Score: 0</div>
+
+    <div id="gestureText" class="hiddenInfo">Gesture: -</div>
+    <div id="zoomText" class="hiddenInfo">Zoom: -</div>
+    <div id="lockText" class="hiddenInfo">Globe: Unlocked</div>
+    <div id="handText" class="hiddenInfo">Hand: Waiting...</div>
+  </div>
+
+  <div id="successFlash">CORRECT!</div>
+
+  <script>
+    const videoElement = document.getElementById("cameraVideo");
+    const canvas = document.getElementById("threeCanvas");
+
+    const startScreen = document.getElementById("startScreen");
+    const endScreen = document.getElementById("endScreen");
+    const playerNameInput = document.getElementById("playerNameInput");
+    const startGameBtn = document.getElementById("startGameBtn");
+    const playAgainBtn = document.getElementById("playAgainBtn");
+    const languageBtn = document.getElementById("languageBtn");
+
+    const startTitle = document.getElementById("startTitle");
+    const startDesc = document.getElementById("startDesc");
+    const timeDesc = document.getElementById("timeDesc");
+    const pointDesc = document.getElementById("pointDesc");
+    const moveDesc = document.getElementById("moveDesc");
+    const zoomInDesc = document.getElementById("zoomInDesc");
+    const zoomOutDesc = document.getElementById("zoomOutDesc");
+    const lockDesc = document.getElementById("lockDesc");
+    const endTitle = document.getElementById("endTitle");
+
+    const handCursor1 = document.getElementById("handCursor1");
+    const handCursor2 = document.getElementById("handCursor2");
+
+    const playerText = document.getElementById("playerText");
+    const timerText = document.getElementById("timerText");
+    const missionText = document.getElementById("missionText");
+    const targetCountryEl = document.getElementById("targetCountry");
+    const scoreText = document.getElementById("scoreText");
+    const gestureText = document.getElementById("gestureText");
+    const zoomText = document.getElementById("zoomText");
+    const lockText = document.getElementById("lockText");
+    const handText = document.getElementById("handText");
+
+    const finalPlayerName = document.getElementById("finalPlayerName");
+    const finalScore = document.getElementById("finalScore");
+    const successFlash = document.getElementById("successFlash");
+
+    let scene, camera3D, renderer;
+    let globeGroup, earth, clouds;
+
+    let targetCameraZ = 4.3;
+    let score = 0;
+
+    let handScreenX = null;
+    let handScreenY = null;
+
+    let smoothHandX = null;
+    let smoothHandY = null;
+    let lastSmoothHandX = null;
+    let lastSmoothHandY = null;
+
+    let targetRotationX = 0;
+    let targetRotationY = 0;
+
+    let currentTargetIndex = 0;
+    let lastCorrectTime = 0;
+
+    let gameStarted = false;
+    let gameEnded = false;
+    let globeLocked = false;
+
+    let playerName = "Player";
+    let totalTime = 180;
+    let timeLeft = 180;
+    let timerInterval = null;
+    let cameraAlreadyStarted = false;
+
+    let lastLockGestureTime = 0;
+    let lastTwoHandDistance = null;
+
+    let currentLanguage = "en";
+
+    const translations = {
+      en: {
+        htmlLang: "en",
+        switchBtn: "ภาษาไทย",
+        startTitle: "🌍 Two Hands 3D Globe Game",
+        startDesc: "Enter the player name and click Start Game.",
+        timeDesc: "Total play time: <b>3 minutes</b>",
+        pointDesc: "Easy countries = <b>10 points</b><br>Difficult countries = <b>20 points</b>",
+        moveDesc: "🖐️ Move your hand left or right to rotate the globe.",
+        zoomInDesc: "🤏 Pinch your thumb and index finger to zoom in quickly.",
+        zoomOutDesc: "⬅️➡️ Use both index fingers and move them apart to zoom out.",
+        lockDesc: "✊ Make a fist to lock the globe. 🖐️ Open your palm to unlock it.",
+        placeholder: "Enter player name",
+        startButton: "START GAME",
+        loading: "LOADING CAMERA...",
+        player: "Player",
+        find: "Find",
+        score: "Score",
+        finalScore: "Final Score",
+        timeUp: "⏰ Time’s Up!",
+        playAgain: "PLAY AGAIN",
+        cameraError: "Camera could not be opened. Please allow camera access or run this file with Live Server / localhost.",
+        correct: "CORRECT!",
+        points: "POINTS!",
+        defaultPlayer: "Player"
+      },
+      th: {
+        htmlLang: "th",
+        switchBtn: "English",
+        startTitle: "🌍 เกมลูกโลก 3D ควบคุมด้วยมือ",
+        startDesc: "พิมพ์ชื่อผู้เล่น แล้วกดเริ่มเกม",
+        timeDesc: "เวลาเล่นทั้งหมด: <b>3 นาที</b>",
+        pointDesc: "ประเทศง่าย = <b>10 คะแนน</b><br>ประเทศยาก = <b>20 คะแนน</b>",
+        moveDesc: "🖐️ เลื่อนมือซ้ายหรือขวา เพื่อหมุนลูกโลก",
+        zoomInDesc: "🤏 จีบนิ้วโป้งและนิ้วชี้ เพื่อซูมเข้าแบบเร็ว",
+        zoomOutDesc: "⬅️➡️ ใช้นิ้วชี้ 2 มือถ่างออกจากกัน เพื่อซูมออก",
+        lockDesc: "✊ กำมือเพื่อล็อกลูกโลก 🖐️ แบมือเพื่อปลดล็อก",
+        placeholder: "พิมพ์ชื่อผู้เล่น",
+        startButton: "เริ่มเกม",
+        loading: "กำลังเปิดกล้อง...",
+        player: "ผู้เล่น",
+        find: "ค้นหา",
+        score: "คะแนน",
+        finalScore: "คะแนนรวม",
+        timeUp: "⏰ หมดเวลา!",
+        playAgain: "เล่นอีกครั้ง",
+        cameraError: "เปิดกล้องไม่ได้ กรุณาอนุญาตให้ใช้กล้อง หรือเปิดผ่าน Live Server / localhost",
+        correct: "ถูกต้อง!",
+        points: "คะแนน!",
+        defaultPlayer: "ผู้เล่น"
+      }
+    };
+
+    const countries = [
+      { name: "Thailand", lat: 15.87, lon: 100.99, points: 10 },
+      { name: "Japan", lat: 36.20, lon: 138.25, points: 10 },
+      { name: "South Korea", lat: 35.90, lon: 127.76, points: 10 },
+      { name: "China", lat: 35.86, lon: 104.19, points: 10 },
+      { name: "India", lat: 20.59, lon: 78.96, points: 10 },
+      { name: "France", lat: 46.22, lon: 2.21, points: 10 },
+      { name: "USA", lat: 37.09, lon: -95.71, points: 10 },
+      { name: "Brazil", lat: -14.24, lon: -51.92, points: 20 },
+      { name: "Australia", lat: -25.27, lon: 133.77, points: 20 },
+      { name: "Egypt", lat: 26.82, lon: 30.80, points: 20 },
+      { name: "South Africa", lat: -30.56, lon: 22.93, points: 20 },
+      { name: "United Kingdom", lat: 55.37, lon: -3.43, points: 20 }
+    ];
+
+    const markers = [];
+
+    initThree();
+    setNewTarget();
+    applyLanguage();
+
+    function applyLanguage() {
+      const t = translations[currentLanguage];
+
+      document.documentElement.lang = t.htmlLang;
+      languageBtn.textContent = t.switchBtn;
+
+      startTitle.innerHTML = t.startTitle;
+      startDesc.innerHTML = t.startDesc;
+      timeDesc.innerHTML = t.timeDesc;
+      pointDesc.innerHTML = t.pointDesc;
+      moveDesc.innerHTML = t.moveDesc;
+      zoomInDesc.innerHTML = t.zoomInDesc;
+      zoomOutDesc.innerHTML = t.zoomOutDesc;
+      lockDesc.innerHTML = t.lockDesc;
+
+      playerNameInput.placeholder = t.placeholder;
+      playAgainBtn.textContent = t.playAgain;
+      endTitle.textContent = t.timeUp;
+      missionText.textContent = t.find;
+
+      if (!gameStarted) {
+        startGameBtn.textContent = t.startButton;
+        playerText.textContent = t.player + ": -";
+        scoreText.textContent = t.score + ": 0";
+      } else {
+        playerText.textContent = t.player + ": " + playerName;
+        scoreText.textContent = t.score + ": " + score;
+      }
+
+      finalPlayerName.textContent = t.player + ": " + playerName;
+      finalScore.textContent = t.finalScore + ": " + score;
+
+      successFlash.textContent = t.correct;
+    }
+
+    languageBtn.addEventListener("click", () => {
+      currentLanguage = currentLanguage === "en" ? "th" : "en";
+      applyLanguage();
+    });
+
+    function initThree() {
+      scene = new THREE.Scene();
+
+      camera3D = new THREE.PerspectiveCamera(
+        45,
+        window.innerWidth / window.innerHeight,
+        0.1,
+        1000
+      );
+
+      camera3D.position.z = 4.3;
+
+      renderer = new THREE.WebGLRenderer({
+        canvas,
+        alpha: true,
+        antialias: true
+      });
+
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+      scene.add(new THREE.AmbientLight(0xffffff, 1.25));
+
+      const sunLight = new THREE.DirectionalLight(0xffffff, 2.1);
+      sunLight.position.set(5, 3, 5);
+      scene.add(sunLight);
+
+      const rimLight = new THREE.DirectionalLight(0x60a5fa, 1.2);
+      rimLight.position.set(-5, 2, -4);
+      scene.add(rimLight);
+
+      globeGroup = new THREE.Group();
+      scene.add(globeGroup);
+
+      const textureLoader = new THREE.TextureLoader();
+
+      const earthTexture = textureLoader.load(
+        "https://threejs.org/examples/textures/land_ocean_ice_cloud_2048.jpg"
+      );
+
+      earth = new THREE.Mesh(
+        new THREE.SphereGeometry(1.45, 128, 128),
+        new THREE.MeshStandardMaterial({
+          map: earthTexture,
+          roughness: 0.72,
+          metalness: 0.04
+        })
+      );
+
+      globeGroup.add(earth);
+
+      const cloudTexture = textureLoader.load(
+        "https://threejs.org/examples/textures/planets/earth_clouds_1024.png"
+      );
+
+      clouds = new THREE.Mesh(
+        new THREE.SphereGeometry(1.49, 128, 128),
+        new THREE.MeshStandardMaterial({
+          map: cloudTexture,
+          transparent: true,
+          opacity: 0.24
+        })
+      );
+
+      globeGroup.add(clouds);
+
+      createStars();
+      createCountryMarkers();
+
+      window.addEventListener("resize", onResize);
+      window.addEventListener("wheel", onMouseWheel);
+
+      animate();
+    }
+
+    function createStars() {
+      const geometry = new THREE.BufferGeometry();
+      const positions = [];
+
+      for (let i = 0; i < 900; i++) {
+        positions.push(
+          (Math.random() - 0.5) * 90,
+          (Math.random() - 0.5) * 90,
+          (Math.random() - 0.5) * 90
+        );
+      }
+
+      geometry.setAttribute(
+        "position",
+        new THREE.Float32BufferAttribute(positions, 3)
+      );
+
+      scene.add(
+        new THREE.Points(
+          geometry,
+          new THREE.PointsMaterial({
+            color: 0xffffff,
+            size: 0.035,
+            transparent: true,
+            opacity: 0.8
+          })
+        )
+      );
+    }
+
+    function latLongToVector3(lat, lon, radius) {
+      const phi = (90 - lat) * Math.PI / 180;
+      const theta = (lon + 180) * Math.PI / 180;
+
+      return new THREE.Vector3(
+        -radius * Math.sin(phi) * Math.cos(theta),
+        radius * Math.cos(phi),
+        radius * Math.sin(phi) * Math.sin(theta)
+      );
+    }
+
+    function makeLabel(text) {
+      const labelCanvas = document.createElement("canvas");
+      const ctx = labelCanvas.getContext("2d");
+
+      labelCanvas.width = 360;
+      labelCanvas.height = 110;
+
+      ctx.fillStyle = "rgba(15,23,42,0.78)";
+      roundRect(ctx, 10, 22, 340, 60, 24);
+      ctx.fill();
+
+      ctx.strokeStyle = "rgba(255,255,255,0.65)";
+      ctx.lineWidth = 3;
+      roundRect(ctx, 10, 22, 340, 60, 24);
+      ctx.stroke();
+
+      ctx.font = "bold 30px Arial";
+      ctx.fillStyle = "#ffffff";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(text, 180, 52);
+
+      const texture = new THREE.CanvasTexture(labelCanvas);
+      const material = new THREE.SpriteMaterial({
+        map: texture,
+        transparent: true,
+        depthTest: false
+      });
+
+      const sprite = new THREE.Sprite(material);
+      sprite.scale.set(0.7, 0.22, 1);
+      return sprite;
+    }
+
+    function roundRect(ctx, x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.lineTo(x + w - r, y);
+      ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+      ctx.lineTo(x + w, y + h - r);
+      ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+      ctx.lineTo(x + r, y + h);
+      ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+      ctx.lineTo(x, y + r);
+      ctx.quadraticCurveTo(x, y, x + r, y);
+      ctx.closePath();
+    }
+
+    function createCountryMarkers() {
+      countries.forEach((country) => {
+        const pos = latLongToVector3(country.lat, country.lon, 1.56);
+
+        const marker = new THREE.Mesh(
+          new THREE.SphereGeometry(0.035, 24, 24),
+          new THREE.MeshBasicMaterial({ color: 0xfacc15 })
+        );
+
+        marker.position.copy(pos);
+        globeGroup.add(marker);
+
+        const ring = new THREE.Mesh(
+          new THREE.RingGeometry(0.045, 0.067, 32),
+          new THREE.MeshBasicMaterial({
+            color: 0xffffff,
+            transparent: true,
+            opacity: 0.9,
+            side: THREE.DoubleSide
+          })
+        );
+
+        ring.position.copy(pos.clone().multiplyScalar(1.002));
+        ring.lookAt(new THREE.Vector3(0, 0, 0));
+        globeGroup.add(ring);
+
+        const label = makeLabel(country.name);
+        label.position.copy(pos.clone().multiplyScalar(1.18));
+        globeGroup.add(label);
+
+        markers.push({ marker, ring, label, country });
+      });
+    }
+
+    function setNewTarget() {
+      currentTargetIndex = Math.floor(Math.random() * countries.length);
+
+      targetCountryEl.textContent =
+        countries[currentTargetIndex].name +
+        " +" +
+        countries[currentTargetIndex].points +
+        " pts";
+
+      markers.forEach((m, i) => {
+        const isTarget = i === currentTargetIndex;
+
+        m.marker.material.color.set(isTarget ? 0x22c55e : 0xfacc15);
+        m.marker.scale.setScalar(isTarget ? 2.0 : 1);
+        m.ring.scale.setScalar(isTarget ? 2.0 : 1);
+        m.label.scale.set(
+          isTarget ? 0.86 : 0.62,
+          isTarget ? 0.27 : 0.2,
+          1
+        );
+      });
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      if (gameStarted && !gameEnded && !globeLocked) {
+        globeGroup.rotation.x += (targetRotationX - globeGroup.rotation.x) * 0.22;
+        globeGroup.rotation.y += (targetRotationY - globeGroup.rotation.y) * 0.22;
+      }
+
+      camera3D.position.z += (targetCameraZ - camera3D.position.z) * 0.22;
+
+      zoomText.textContent = "Zoom: " + camera3D.position.z.toFixed(2);
+
+      if (gameStarted && !gameEnded) {
+        checkHandHitTarget();
+      }
+
+      renderer.render(scene, camera3D);
+    }
+
+    function checkHandHitTarget() {
+      if (handScreenX === null || handScreenY === null) return;
+      if (!markers[currentTargetIndex]) return;
+
+      const now = performance.now();
+
+      if (now - lastCorrectTime < 900) return;
+
+      const target = markers[currentTargetIndex].marker;
+      const worldPos = new THREE.Vector3();
+
+      target.getWorldPosition(worldPos);
+
+      const projected = worldPos.clone().project(camera3D);
+
+      if (projected.z >= 1) return;
+
+      const sx = (projected.x * 0.5 + 0.5) * window.innerWidth;
+      const sy = (-projected.y * 0.5 + 0.5) * window.innerHeight;
+
+      const dx = sx - handScreenX;
+      const dy = sy - handScreenY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      if (dist < 60) {
+        const earnedPoints = countries[currentTargetIndex].points;
+
+        score += earnedPoints;
+        scoreText.textContent = translations[currentLanguage].score + ": " + score;
+        lastCorrectTime = now;
+
+        successFlash.textContent =
+          "+" + earnedPoints + " " + translations[currentLanguage].points;
+
+        successFlash.classList.add("showFlash");
+
+        setTimeout(() => {
+          successFlash.classList.remove("showFlash");
+          successFlash.textContent = translations[currentLanguage].correct;
+        }, 500);
+
+        setNewTarget();
+      }
+    }
+
+    function onResize() {
+      camera3D.aspect = window.innerWidth / window.innerHeight;
+      camera3D.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    function onMouseWheel(e) {
+      if (!gameStarted || gameEnded) return;
+
+      targetCameraZ += e.deltaY * 0.0035;
+      targetCameraZ = clamp(targetCameraZ, 2.1, 8.8);
+    }
+
+    function clamp(value, min, max) {
+      return Math.max(min, Math.min(max, value));
+    }
+
+    function distance2D(a, b) {
+      const dx = a.x - b.x;
+      const dy = a.y - b.y;
+
+      return Math.sqrt(dx * dx + dy * dy);
+    }
+
+    function detectFingerOpen(hand) {
+      const indexOpen = hand[8].y < hand[5].y;
+      const middleOpen = hand[12].y < hand[9].y;
+      const ringOpen = hand[16].y < hand[13].y;
+      const pinkyOpen = hand[20].y < hand[17].y;
+
+      const openFingerCount =
+        Number(indexOpen) +
+        Number(middleOpen) +
+        Number(ringOpen) +
+        Number(pinkyOpen);
+
+      return {
+        indexOpen,
+        middleOpen,
+        ringOpen,
+        pinkyOpen,
+        openFingerCount,
+        isOpenPalm: openFingerCount >= 4,
+        isFist: openFingerCount <= 1
+      };
+    }
+
+    function getScreenPointFromIndexTip(hand) {
+      const indexTip = hand[8];
+
+      return {
+        x: (1 - indexTip.x) * window.innerWidth,
+        y: indexTip.y * window.innerHeight
+      };
+    }
+
+    function showCursor(cursor, point) {
+      cursor.style.display = "block";
+      cursor.style.left = point.x + "px";
+      cursor.style.top = point.y + "px";
+    }
+
+    function hideCursor(cursor) {
+      cursor.style.display = "none";
+    }
+
+    function handleHandResults(results) {
+      if (!gameStarted || gameEnded) return;
+
+      const handsDetected = results.multiHandLandmarks || [];
+
+      if (handsDetected.length === 0) {
+        hideCursor(handCursor1);
+        hideCursor(handCursor2);
+
+        smoothHandX = null;
+        smoothHandY = null;
+        lastSmoothHandX = null;
+        lastSmoothHandY = null;
+        lastTwoHandDistance = null;
+
+        return;
+      }
+
+      const hand1 = handsDetected[0];
+      const hand1Point = getScreenPointFromIndexTip(hand1);
+
+      showCursor(handCursor1, hand1Point);
+
+      if (handsDetected.length >= 2) {
+        const hand2 = handsDetected[1];
+        const hand2Point = getScreenPointFromIndexTip(hand2);
+
+        showCursor(handCursor2, hand2Point);
+
+        const currentDistance = Math.abs(hand1Point.x - hand2Point.x);
+
+        if (lastTwoHandDistance !== null) {
+          const distanceChange = currentDistance - lastTwoHandDistance;
+
+          if (distanceChange > 8) {
+            targetCameraZ += 0.20;
+
+            handCursor1.style.background = "rgba(56,189,248,0.9)";
+            handCursor2.style.background = "rgba(56,189,248,0.9)";
+            handCursor1.style.boxShadow = "0 0 35px rgba(56,189,248,1)";
+            handCursor2.style.boxShadow = "0 0 35px rgba(56,189,248,1)";
+          }
+        }
+
+        lastTwoHandDistance = currentDistance;
+        targetCameraZ = clamp(targetCameraZ, 2.1, 8.8);
+
+        return;
+      } else {
+        hideCursor(handCursor2);
+        lastTwoHandDistance = null;
+      }
+
+      const hand = hand1;
+      const thumbTip = hand[4];
+      const indexTip = hand[8];
+      const fingerState = detectFingerOpen(hand);
+
+      const rawX = 1 - indexTip.x;
+      const rawY = indexTip.y;
+
+      if (smoothHandX === null) {
+        smoothHandX = rawX;
+        smoothHandY = rawY;
+        lastSmoothHandX = rawX;
+        lastSmoothHandY = rawY;
+      }
+
+      const smoothing = 0.38;
+
+      smoothHandX = smoothHandX + (rawX - smoothHandX) * smoothing;
+      smoothHandY = smoothHandY + (rawY - smoothHandY) * smoothing;
+
+      handScreenX = smoothHandX * window.innerWidth;
+      handScreenY = smoothHandY * window.innerHeight;
+
+      showCursor(handCursor1, {
+        x: handScreenX,
+        y: handScreenY
+      });
+
+      const now = performance.now();
+
+      if (now - lastLockGestureTime > 450) {
+        if (fingerState.isFist && !globeLocked) {
+          globeLocked = true;
+          lastLockGestureTime = now;
+          lockText.textContent = "Globe: Locked by fist";
+        }
+
+        if (fingerState.isOpenPalm && globeLocked) {
+          globeLocked = false;
+          lastLockGestureTime = now;
+          targetRotationX = globeGroup.rotation.x;
+          targetRotationY = globeGroup.rotation.y;
+          lockText.textContent = "Globe: Unlocked by open palm";
+        }
+      }
+
+      const dx = smoothHandX - lastSmoothHandX;
+      const dy = smoothHandY - lastSmoothHandY;
+
+      const rotateSensitivityX = 8.5;
+      const rotateSensitivityY = 4.2;
+
+      if (!globeLocked) {
+        if (Math.abs(dx) > 0.0015) {
+          targetRotationY += dx * rotateSensitivityX;
+        }
+
+        if (Math.abs(dy) > 0.0015) {
+          targetRotationX += dy * rotateSensitivityY;
+          targetRotationX = clamp(targetRotationX, -1.2, 1.2);
+        }
+      }
+
+      lastSmoothHandX = smoothHandX;
+      lastSmoothHandY = smoothHandY;
+
+      const pinch = distance2D(indexTip, thumbTip);
+
+      if (fingerState.isFist) {
+        handCursor1.style.background = "rgba(239,68,68,0.90)";
+        handCursor1.style.boxShadow = "0 0 35px rgba(239,68,68,1)";
+
+      } else if (fingerState.isOpenPalm) {
+        handCursor1.style.background = "rgba(34,197,94,0.88)";
+        handCursor1.style.boxShadow = "0 0 35px rgba(34,197,94,1)";
+
+      } else if (pinch < 0.055) {
+        targetCameraZ -= 0.13;
+        handCursor1.style.background = "rgba(34,197,94,0.90)";
+        handCursor1.style.boxShadow = "0 0 35px rgba(34,197,94,1)";
+
+      } else {
+        handCursor1.style.background = globeLocked
+          ? "rgba(239,68,68,0.75)"
+          : "rgba(250,204,21,0.82)";
+
+        handCursor1.style.boxShadow = globeLocked
+          ? "0 0 35px rgba(239,68,68,1)"
+          : "0 0 35px rgba(250,204,21,1)";
+      }
+
+      targetCameraZ = clamp(targetCameraZ, 2.1, 8.8);
+    }
+
+    async function startCameraSystem() {
+      if (cameraAlreadyStarted) return;
+
+      const hands = new Hands({
+        locateFile: (file) => {
+          return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+        }
+      });
+
+      hands.setOptions({
+        maxNumHands: 2,
+        modelComplexity: 1,
+        minDetectionConfidence: 0.72,
+        minTrackingConfidence: 0.72
+      });
+
+      hands.onResults(handleHandResults);
+
+      const cameraMP = new Camera(videoElement, {
+        onFrame: async () => {
+          await hands.send({ image: videoElement });
+        },
+        width: 960,
+        height: 540
+      });
+
+      await cameraMP.start();
+      cameraAlreadyStarted = true;
+    }
+
+    async function startGame() {
+      const t = translations[currentLanguage];
+
+      playerName = playerNameInput.value.trim();
+
+      if (playerName === "") {
+        playerName = t.defaultPlayer;
+      }
+
+      try {
+        startGameBtn.textContent = t.loading;
+        startGameBtn.disabled = true;
+
+        await startCameraSystem();
+
+        score = 0;
+        timeLeft = totalTime;
+        gameStarted = true;
+        gameEnded = false;
+        globeLocked = false;
+
+        playerText.textContent = t.player + ": " + playerName;
+        scoreText.textContent = t.score + ": 0";
+        lockText.textContent = "Globe: Unlocked";
+        handText.textContent = "Hand: Ready";
+
+        resetView();
+        setNewTarget();
+        updateTimerText();
+
+        startScreen.classList.add("hidden");
+        endScreen.classList.add("hidden");
+
+        if (timerInterval) {
+          clearInterval(timerInterval);
+        }
+
+        timerInterval = setInterval(() => {
+          timeLeft--;
+          updateTimerText();
+
+          if (timeLeft <= 0) {
+            endGame();
+          }
+        }, 1000);
+
+      } catch (err) {
+        console.error(err);
+
+        startGameBtn.textContent = t.startButton;
+        startGameBtn.disabled = false;
+
+        alert(t.cameraError);
+      }
+    }
+
+    function updateTimerText() {
+      const minutes = Math.floor(timeLeft / 60);
+      const seconds = timeLeft % 60;
+
+      timerText.textContent =
+        String(minutes).padStart(2, "0") + ":" +
+        String(seconds).padStart(2, "0");
+
+      timerText.style.color = timeLeft <= 30 ? "#fecaca" : "#fef3c7";
+    }
+
+    function endGame() {
+      const t = translations[currentLanguage];
+
+      gameEnded = true;
+      gameStarted = false;
+
+      if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+      }
+
+      hideCursor(handCursor1);
+      hideCursor(handCursor2);
+
+      finalPlayerName.textContent = t.player + ": " + playerName;
+      finalScore.textContent = t.finalScore + ": " + score;
+
+      endScreen.classList.remove("hidden");
+
+      startGameBtn.textContent = t.startButton;
+      startGameBtn.disabled = false;
+    }
+
+    function resetView() {
+      targetRotationX = 0;
+      targetRotationY = 0;
+
+      globeGroup.rotation.x = 0;
+      globeGroup.rotation.y = 0;
+
+      targetCameraZ = 4.3;
+
+      smoothHandX = null;
+      smoothHandY = null;
+      lastSmoothHandX = null;
+      lastSmoothHandY = null;
+      lastTwoHandDistance = null;
+    }
+
+    startGameBtn.addEventListener("click", startGame);
+
+    playerNameInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        startGame();
+      }
+    });
+
+    playAgainBtn.addEventListener("click", () => {
+      endScreen.classList.add("hidden");
+      startScreen.classList.remove("hidden");
+      playerNameInput.focus();
+      applyLanguage();
+    });
+  </script>
+</body>
+</html>
